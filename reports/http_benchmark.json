@@ -1,0 +1,41 @@
+{
+  "measured_at_utc": "2026-10-04T23:54:47.339629+00:00",
+  "base_url": "http://127.0.0.1:8000",
+  "model_id": "tfidf",
+  "model_version": "ad3553d4187cf1e1",
+  "environment_description": "Apple M1 host (8 GiB); Linux arm64 Docker in Colima (2 vCPU, 2 GiB); one Uvicorn worker; BLAS/OpenMP 2 threads; CPU only; no concurrent model training",
+  "client_platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "client_python": "3.14.5",
+  "measurement": "Sequential warm HTTP requests including server inference and synchronous SQLite history writes; client wall-clock latency from urlopen through reading the response. No concurrent load. Synthetic English reviews, not dataset samples. Model startup and three warm-up requests per case are excluded. Percentiles use linear interpolation. Client platform does not describe remote server hardware.",
+  "single": {
+    "short": {
+      "characters": 77,
+      "requests": 30,
+      "p50_ms": 6.282,
+      "p95_ms": 8.629,
+      "max_ms": 12.111
+    },
+    "medium": {
+      "characters": 396,
+      "requests": 30,
+      "p50_ms": 6.509,
+      "p95_ms": 7.936,
+      "max_ms": 8.811
+    },
+    "long": {
+      "characters": 1297,
+      "requests": 30,
+      "p50_ms": 8.554,
+      "p95_ms": 10.399,
+      "max_ms": 11.801
+    }
+  },
+  "batch16": {
+    "items": 16,
+    "characters_total": 8927,
+    "requests": 30,
+    "p50_ms": 14.976,
+    "p95_ms": 22.154,
+    "max_ms": 29.277
+  }
+}
