@@ -1,0 +1,131 @@
+{
+  "platform": "macOS-26.5.1-arm64-arm-64bit",
+  "machine": "arm64",
+  "processor": "arm",
+  "threads": 2,
+  "batch_size": 1,
+  "repeats_per_length": 10,
+  "sample_length_quantiles": [
+    0.1,
+    0.5,
+    0.9
+  ],
+  "scope": "Warm direct model calls including text preprocessing; excludes HTTP/network and cold startup.",
+  "data_sha256": "8063198a0aef6c522a30d29baeae513464a1d95e42176687afc01c8d84ad34c7",
+  "split_sha256": "905281ad7c6886f4c1b8ba5e9a4513da946d61bdcadb8dccf8f91bc993c39e25",
+  "models": {
+    "tfidf": {
+      "load_seconds": 0.4019787499855738,
+      "artifact_bytes": 4481784,
+      "artifact_sha256": "5da270e4994ce57fb69783fcaabb1e5f18b5d5b5570069ed6686bf241fa8b013",
+      "version": "ad3553d4187cf1e1",
+      "requests": 30,
+      "median_ms": 1.7033340118359774,
+      "p95_ms": 2.0593527631717734,
+      "by_length": [
+        {
+          "characters": 52,
+          "median_ms": 1.609604005352594,
+          "p95_ms": 1.737314563069958
+        },
+        {
+          "characters": 164,
+          "median_ms": 1.6946045070653781,
+          "p95_ms": 1.729472390434239
+        },
+        {
+          "characters": 717,
+          "median_ms": 2.0473335025599226,
+          "p95_ms": 2.080094054690562
+        }
+      ]
+    },
+    "word-only": {
+      "load_seconds": 0.21471083399956115,
+      "artifact_bytes": 2597275,
+      "artifact_sha256": "f874bebad6572ae2c6166bd46edd9a294e785b42767f7e27e32304bf44f4ad2e",
+      "version": "ad3553d4187cf1e1",
+      "requests": 30,
+      "median_ms": 0.29577100940514356,
+      "p95_ms": 0.34818369895219803,
+      "by_length": [
+        {
+          "characters": 52,
+          "median_ms": 0.2948754990939051,
+          "p95_ms": 0.3430210548685863
+        },
+        {
+          "characters": 164,
+          "median_ms": 0.28914600261487067,
+          "p95_ms": 0.29260206647450104
+        },
+        {
+          "characters": 717,
+          "median_ms": 0.33897899265866727,
+          "p95_ms": 0.34818369895219803
+        }
+      ]
+    },
+    "deberta-experiment": {
+      "load_seconds": 0.3262514999951236,
+      "artifact_bytes": 740436613,
+      "max_tokens": 128,
+      "model_directory": "data/cache/deberta_v3_base_top2_5b9d7527ecb4",
+      "training_device": "mps",
+      "evaluation_source": "Historical notebook validation probabilities; no fresh CPU validation pass",
+      "first_fold_mae": 0.1472157385795265,
+      "weights_sha256": "94540ee6ab4d659a3cca89da28b525c6717ae5fd7b59e7153f9d49ae37cee0ac",
+      "requests": 30,
+      "median_ms": 58.35397899500094,
+      "p95_ms": 87.32925436197547,
+      "by_length": [
+        {
+          "characters": 52,
+          "median_ms": 56.38660449767485,
+          "p95_ms": 67.90023125358856
+        },
+        {
+          "characters": 164,
+          "median_ms": 57.538708511856385,
+          "p95_ms": 60.963304201141
+        },
+        {
+          "characters": 717,
+          "median_ms": 87.00554199458566,
+          "p95_ms": 88.05310205643764
+        }
+      ]
+    },
+    "mpnet-catboost-experiment": {
+      "load_seconds": 1.2719868339772802,
+      "max_tokens": 256,
+      "mpnet_manifest": "data/cache/mpnet_4eef94615af4.json",
+      "catboost_manifest": "data/cache/catboost_mpnet_8bcee853555f.json",
+      "embedding_sha256": "511c3120747f25b6b9c969e22a13acb9835ff3ba8e23d8cf2de2dbc8dcdd7648",
+      "regressor_sha256": "63895b888f59d70fd1099f76d7cd888f071afef1990f174b8737c6d2c067fd55",
+      "embedding_device": "mps",
+      "evaluation_source": "Historical notebook embeddings scored by cached regressor; no fresh CPU encoder validation pass",
+      "first_fold_mae": 0.44324789294005157,
+      "requests": 30,
+      "median_ms": 37.168958006077446,
+      "p95_ms": 78.75953109905822,
+      "by_length": [
+        {
+          "characters": 52,
+          "median_ms": 33.91316649504006,
+          "p95_ms": 39.778789940464776
+        },
+        {
+          "characters": 164,
+          "median_ms": 35.99247898091562,
+          "p95_ms": 38.53790885041235
+        },
+        {
+          "characters": 717,
+          "median_ms": 77.77697952406015,
+          "p95_ms": 79.6306124975672
+        }
+      ]
+    }
+  }
+}

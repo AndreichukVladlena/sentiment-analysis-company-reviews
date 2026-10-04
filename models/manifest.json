@@ -1,0 +1,23 @@
+{
+  "default_model": "tfidf",
+  "models": [
+    {
+      "id": "tfidf",
+      "filename": "tfidf.joblib",
+      "version": "ad3553d4187cf1e1",
+      "description": "Word and character TF-IDF with 13 numeric features; probability median",
+      "sha256": "5da270e4994ce57fb69783fcaabb1e5f18b5d5b5570069ed6686bf241fa8b013",
+      "sklearn_version": "1.9.1",
+      "bytes": 4481784
+    },
+    {
+      "id": "word-only",
+      "filename": "word-only.joblib",
+      "version": "ad3553d4187cf1e1",
+      "description": "Word TF-IDF baseline; probability median",
+      "sha256": "f874bebad6572ae2c6166bd46edd9a294e785b42767f7e27e32304bf44f4ad2e",
+      "sklearn_version": "1.9.1",
+      "bytes": 2597275
+    }
+  ]
+}
