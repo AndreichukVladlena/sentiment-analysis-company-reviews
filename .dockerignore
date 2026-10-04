@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!company_reviews/
+!company_reviews/*.py
+!models/
+!models/manifest.json
+!models/*.joblib

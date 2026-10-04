@@ -1,0 +1,23 @@
+name: company-reviews
+
+services:
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      STORE_REVIEW_TEXT: "${STORE_REVIEW_TEXT:-0}"
+    volumes:
+      - history:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    restart: unless-stopped
+
+volumes:
+  history:
