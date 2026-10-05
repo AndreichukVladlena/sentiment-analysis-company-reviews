@@ -1,0 +1,12 @@
+# Kaggle competition data stays local and is not published with the repository.
+/data/raw/
+/data/cache/
+
+# Local Python and notebook artifacts.
+.venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.DS_Store
+.ruff_cache/
