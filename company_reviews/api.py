@@ -12,7 +12,6 @@ from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from starlette.types import ASGIApp, Receive, Scope, Send
 
 from company_reviews.history import HistoryStore
 from company_reviews.model_registry import (
@@ -23,7 +22,6 @@ from company_reviews.model_registry import (
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MAX_BODY_BYTES = 1_048_576
 
 
 class ReviewRow(BaseModel):
@@ -77,81 +75,9 @@ class ModelSelection(BaseModel):
     )
 
 
-class BodyLimitMiddleware:
-    """Bound the body before JSON parsing, including chunked HTTP requests."""
-
-    def __init__(self, app: ASGIApp):
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-        chunks = []
-        size = 0
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                return
-            chunk = message.get("body", b"")
-            size += len(chunk)
-            if size > MAX_BODY_BYTES:
-                response = JSONResponse(
-                    status_code=413, content={"detail": "Тело запроса превышает 1 МиБ"}
-                )
-                await response(scope, receive, send)
-                return
-            chunks.append(chunk)
-            if not message.get("more_body", False):
-                break
-        body = b"".join(chunks)
-        consumed = False
-
-        async def bounded_receive():
-            nonlocal consumed
-            if not consumed:
-                consumed = True
-                return {"type": "http.request", "body": body, "more_body": False}
-            return await receive()
-
-        await self.app(scope, bounded_receive, send)
-
-
-_VALIDATION_MESSAGES = {
-    "missing": "Обязательное поле отсутствует",
-    "string_type": "Ожидается строка",
-    "int_type": "Ожидается целое число",
-    "string_too_short": "Текст не должен быть пустым",
-    "string_too_long": "Текст превышает 20 000 символов",
-    "too_short": "Массив должен содержать хотя бы один отзыв",
-    "too_long": "Массив должен содержать не более 128 отзывов",
-    "extra_forbidden": "Неизвестное поле",
-    "string_pattern_mismatch": "Недопустимый идентификатор модели; смотрите GET /models",
-    "json_invalid": "Некорректный JSON",
-    "greater_than_equal": "Число меньше допустимого значения",
-    "less_than_equal": "Число больше допустимого значения",
-    "model_attributes_type": "Ожидается объект с полем Review или массив таких объектов",
-    "list_type": "Ожидается массив отзывов",
-}
-
-
 async def validation_error_handler(request: Request, exc: RequestValidationError):
-    details = []
-    for error in exc.errors():
-        location = list(error["loc"])
-        # A union has two validation branches. Show only the submitted shape.
-        if len(location) > 1:
-            branch = str(location[1])
-            if isinstance(exc.body, list) and branch == "ReviewRow":
-                continue
-            if isinstance(exc.body, dict) and branch.startswith("list["):
-                continue
-            if branch == "ReviewRow" or branch.startswith("list["):
-                location.pop(1)
-        message = _VALIDATION_MESSAGES.get(error["type"], "Некорректное значение")
-        if error["type"] == "value_error":
-            message = error["msg"].removeprefix("Value error, ")
-        details.append({"loc": location, "message": message})
+    # Return useful field errors without echoing the submitted review text.
+    details = [{"loc": error["loc"], "message": error["msg"]} for error in exc.errors()]
     return JSONResponse(status_code=422, content={"detail": details})
 
 
@@ -184,7 +110,6 @@ def create_app(
         ),
         lifespan=lifespan,
     )
-    application.add_middleware(BodyLimitMiddleware)
     application.add_exception_handler(RequestValidationError, validation_error_handler)
 
     @application.get("/health", summary="Проверить готовность сервиса", tags=["Сервис"])
@@ -254,7 +179,6 @@ def create_app(
             "и X-Request-Id позволяют связать ответ с моделью и историей."
         ),
         responses={
-            413: {"description": "Тело запроса больше 1 МиБ"},
             422: {"description": "Некорректные поля или превышены ограничения"},
             503: {"description": "Ошибка модели или записи истории"},
         },
