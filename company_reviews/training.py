@@ -196,7 +196,11 @@ def save_models(full_model, word_model, output=Path("models")):
             "sklearn_version": version("scikit-learn"),
         }
 
-    full = save("tfidf", full_model, "Words, character fragments and numeric features")
+    full = save(
+        "tfidf",
+        full_model,
+        "TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression",
+    )
     word = save("word-only", word_model, "Word and bigram TF-IDF")
     catalog = {"default_model": "tfidf", "models": [full, word]}
     (output / "manifest.json").write_text(json.dumps(catalog, indent=2) + "\n")
