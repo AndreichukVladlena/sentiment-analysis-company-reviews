@@ -1,0 +1,21 @@
+{
+  "default_model": "tfidf",
+  "models": [
+    {
+      "id": "tfidf",
+      "filename": "tfidf.joblib",
+      "version": "2026-10-06T13:54:24+00:00",
+      "description": "TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression",
+      "sha256": "7be5b5222362933eec1eb457d7e1f8736f35f4e5d91b34ccce83a70302af766f",
+      "sklearn_version": "1.9.1"
+    },
+    {
+      "id": "word-only",
+      "filename": "word-only.joblib",
+      "version": "2026-10-06T13:54:24+00:00",
+      "description": "Word and bigram TF-IDF",
+      "sha256": "5e6fb34e13d562bd536933c1fb83428dacd539d6c8ed9d1d893940e116d52e6c",
+      "sklearn_version": "1.9.1"
+    }
+  ]
+}

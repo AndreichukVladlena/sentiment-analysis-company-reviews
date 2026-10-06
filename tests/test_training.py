@@ -1,5 +1,6 @@
 """Checks for fold isolation and ordinal scoring in the training workflow."""
 
+import json
 import unittest
 
 import numpy as np
@@ -8,9 +9,11 @@ from sklearn.base import clone
 
 from company_reviews.training import (
     ReviewFeatures,
+    build_pipeline,
     build_search,
     export_model,
     negative_median_mae,
+    save_models,
 )
 
 
@@ -53,6 +56,30 @@ class TrainingTest(unittest.TestCase):
         )
         self.assertGreaterEqual(model.predict(reviews).min(), 1)
         self.assertLessEqual(model.predict(reviews).max(), 5)
+
+
+def test_baseline_reexport_preserves_deberta_and_selected_default(tmp_path):
+    model = build_pipeline(min_df=1, word_only=True)
+    model.fit(
+        ["bad delivery", "good delivery", "bad service", "good service"], [1, 5, 1, 5]
+    )
+    save_models(model, model, tmp_path)
+    path = tmp_path / "manifest.json"
+    catalog = json.loads(path.read_text())
+    assert catalog["default_model"] == "tfidf"
+    extra = {"id": "deberta", "version": "full-existing", "filename": "deberta"}
+    catalog["models"].append(extra)
+    catalog["default_model"] = "deberta"
+    path.write_text(json.dumps(catalog))
+    save_models(model, model, tmp_path)
+    result = json.loads(path.read_text())
+    assert result["default_model"] == "deberta"
+    assert [entry["id"] for entry in result["models"]] == [
+        "tfidf",
+        "word-only",
+        "deberta",
+    ]
+    assert result["models"][2] == extra
 
 
 if __name__ == "__main__":

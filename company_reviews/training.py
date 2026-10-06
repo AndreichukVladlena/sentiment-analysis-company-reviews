@@ -1,7 +1,18 @@
-"""Подготовка признаков и GridSearchCV для baselinev2.ipynb."""
+"""Reproducible, sequential TF-IDF training and grouped model selection.
+
+Run from the repository root: python -m company_reviews.training --tune
+"""
 
 from __future__ import annotations
 
+import argparse
+import json
+from datetime import UTC, datetime
+from hashlib import sha256
+from importlib.metadata import version
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -12,11 +23,13 @@ from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.utils.validation import check_is_fitted
+from threadpoolctl import threadpool_limits
 
 from company_reviews.baseline import (
     BaselineModel,
     combine_features,
     median_from_probabilities,
+    normalize_reviews_for_split,
     numeric_feature_matrix,
 )
 
@@ -163,3 +176,80 @@ def read_training_data(path):
         raise ValueError("Exact duplicate reviews have conflicting ratings")
 
     return data.drop_duplicates("Review", keep="first").reset_index(drop=True)
+
+
+def save_models(full_model, word_model, output=Path("models")):
+    """Save TF-IDF models, preserving other models and the selected default."""
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    manifest_path = output / "manifest.json"
+    catalog = {"default_model": "tfidf", "models": []}
+    if manifest_path.exists():
+        catalog = json.loads(manifest_path.read_text(encoding="utf-8"))
+    model_version = datetime.now(UTC).isoformat(timespec="seconds")
+
+    def save(model_id, pipeline, description):
+        path = output / f"{model_id}.joblib"
+        joblib.dump(export_model(pipeline), path, compress=3)
+        return {
+            "id": model_id,
+            "filename": path.name,
+            "version": model_version,
+            "description": description,
+            "sha256": sha256(path.read_bytes()).hexdigest(),
+            "sklearn_version": version("scikit-learn"),
+        }
+
+    full = save(
+        "tfidf",
+        full_model,
+        "TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression",
+    )
+    word = save("word-only", word_model, "Word and bigram TF-IDF")
+    catalog["models"] = [full, word] + [
+        entry
+        for entry in catalog["models"]
+        if entry["id"] not in {"tfidf", "word-only"}
+    ]
+    manifest_path.write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", type=Path, default=Path("data/raw/train.csv"))
+    parser.add_argument("--output", type=Path, default=Path("models"))
+    parser.add_argument(
+        "--tune", action="store_true", help="Run the 9-combination grid search"
+    )
+    args = parser.parse_args()
+
+    data = read_training_data(args.data)
+    reviews = data["Review"]
+    labels = data["Rating"]
+    groups = normalize_reviews_for_split(reviews)
+
+    # Cache only Pipeline transformations, not completed searches or scores.
+    memory = joblib.Memory("data/cache/tfidf-transforms", verbose=0)
+
+    with threadpool_limits(limits=2):
+        if args.tune:
+            search = build_search(memory=memory)
+            search.fit(reviews, labels, groups=groups)
+            full_model = search.best_estimator_
+            print(f"Parameters: {search.best_params_}")
+            print(f"Mean CV MAE: {-search.best_score_:.5f}")
+        else:
+            full_model = build_pipeline()
+            full_model.fit(reviews, labels)
+
+        word_model = build_pipeline(word_only=True)
+        word_model.fit(reviews, labels)
+        save_models(full_model, word_model, args.output)
+
+    print(f"Saved tfidf.joblib, word-only.joblib and manifest.json to {args.output}")
+
+
+if __name__ == "__main__":
+    main()

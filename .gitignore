@@ -1,6 +1,7 @@
 # Kaggle competition data stays local and is not published with the repository.
 /data/raw/
 /data/cache/
+/models/deberta/
 
 # Local Python and notebook artifacts.
 .venv/
@@ -10,3 +11,6 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 .ruff_cache/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
