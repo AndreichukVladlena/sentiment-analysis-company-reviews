@@ -22,6 +22,11 @@ eda = [
     "nbclient>=0.11,<1",
     "nbformat>=5.11,<6",
 ]
+deberta = [
+    "sentencepiece>=0.2,<1",
+    "torch>=2.9,<3",
+    "transformers>=4.57,<5",
+]
 advanced = [
     "accelerate>=1.11,<2",
     "catboost>=1.2,<2",
@@ -33,6 +38,14 @@ advanced = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [dependency-groups]
 dev = [

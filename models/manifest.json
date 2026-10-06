@@ -4,20 +4,18 @@
     {
       "id": "tfidf",
       "filename": "tfidf.joblib",
-      "version": "ad3553d4187cf1e1",
+      "version": "2026-10-06T00:31:16+00:00",
       "description": "TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression",
-      "sha256": "5da270e4994ce57fb69783fcaabb1e5f18b5d5b5570069ed6686bf241fa8b013",
-      "sklearn_version": "1.9.1",
-      "bytes": 4481784
+      "sha256": "ada932d326e37dc02e3f76187b423af785fc258db41c6a8762318d540e355500",
+      "sklearn_version": "1.9.1"
     },
     {
       "id": "word-only",
       "filename": "word-only.joblib",
-      "version": "ad3553d4187cf1e1",
-      "description": "Word TF-IDF baseline; probability median",
-      "sha256": "f874bebad6572ae2c6166bd46edd9a294e785b42767f7e27e32304bf44f4ad2e",
-      "sklearn_version": "1.9.1",
-      "bytes": 2597275
+      "version": "2026-10-06T00:31:16+00:00",
+      "description": "Word and bigram TF-IDF",
+      "sha256": "c3f04784c1ee6e136876b130df11b27137537580236640299164cd244ad3814f",
+      "sklearn_version": "1.9.1"
     }
   ]
 }

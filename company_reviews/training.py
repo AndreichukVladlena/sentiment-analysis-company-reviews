@@ -179,9 +179,13 @@ def read_training_data(path):
 
 
 def save_models(full_model, word_model, output=Path("models")):
-    """Save two trusted models and the catalog used by /load_model."""
+    """Save TF-IDF models, preserving other models and the selected default."""
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
+    manifest_path = output / "manifest.json"
+    catalog = {"default_model": "tfidf", "models": []}
+    if manifest_path.exists():
+        catalog = json.loads(manifest_path.read_text(encoding="utf-8"))
     model_version = datetime.now(UTC).isoformat(timespec="seconds")
 
     def save(model_id, pipeline, description):
@@ -202,8 +206,14 @@ def save_models(full_model, word_model, output=Path("models")):
         "TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression",
     )
     word = save("word-only", word_model, "Word and bigram TF-IDF")
-    catalog = {"default_model": "tfidf", "models": [full, word]}
-    (output / "manifest.json").write_text(json.dumps(catalog, indent=2) + "\n")
+    catalog["models"] = [full, word] + [
+        entry
+        for entry in catalog["models"]
+        if entry["id"] not in {"tfidf", "word-only"}
+    ]
+    manifest_path.write_text(
+        json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def main():

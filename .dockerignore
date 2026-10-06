@@ -7,3 +7,7 @@
 !models/
 !models/manifest.json
 !models/*.joblib
+!models/deberta/
+!models/deberta/*.json
+!models/deberta/spm.model
+!models/deberta/model.safetensors

@@ -1,12 +1,13 @@
 """Trusted local model catalog and atomic, process-local model selection."""
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from hashlib import sha256
+from hashlib import file_digest, sha256
 from io import BytesIO
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import joblib
 import numpy as np
@@ -27,8 +28,25 @@ class ModelSpec(BaseModel):
     filename: str
     version: str = Field(min_length=1, max_length=128)
     description: str = ""
-    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    sklearn_version: str
+    format: Literal["joblib", "deberta"] = "joblib"
+    sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    sklearn_version: str | None = None
+    file_sha256: dict[str, Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def required_checksums(self):
+        if self.format == "joblib" and (not self.sha256 or not self.sklearn_version):
+            raise ValueError("Joblib requires sha256 and sklearn_version")
+        if self.format == "deberta" and not self.file_sha256:
+            raise ValueError("DeBERTa requires per-file checksums")
+        if self.format == "deberta":
+            # История хранит один отпечаток всех файлов, включая токенизатор.
+            self.sha256 = sha256(
+                json.dumps(self.file_sha256, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+        return self
 
 
 class Manifest(BaseModel):
@@ -87,6 +105,31 @@ class ModelRegistry:
                 raise ModelLoadError("No active model")
             return self._active
 
+    def _check_deberta_files(self, path: Path, spec: ModelSpec) -> None:
+        required = {
+            "config.json",
+            "model.safetensors",
+            "tokenizer_config.json",
+            "spm.model",
+        }
+        allowed = required | {
+            "special_tokens_map.json",
+            "added_tokens.json",
+            "training_config.json",
+        }
+        if not required <= spec.file_sha256.keys() <= allowed:
+            raise ModelLoadError("DeBERTa manifest has missing or unsupported files")
+        if {file.name for file in path.iterdir()} != spec.file_sha256.keys():
+            raise ModelLoadError("DeBERTa directory differs from its manifest")
+        for name, checksum in spec.file_sha256.items():
+            file = (path / name).resolve()
+            if file.parent != path or not file.is_file():
+                raise ModelLoadError("DeBERTa files must stay inside their directory")
+            # Не держим ещё одну копию весов (~740 МБ) в памяти для проверки хеша.
+            with file.open("rb") as source:
+                if file_digest(source, "sha256").hexdigest() != checksum:
+                    raise ModelLoadError("DeBERTa file checksum mismatch")
+
     def load(self, model_id: str) -> LoadedModel:
         if model_id not in self._specs:
             raise UnknownModelError(model_id)
@@ -95,17 +138,30 @@ class ModelRegistry:
         with self._load_lock:
             try:
                 path = (self.model_dir / spec.filename).resolve()
-                if path.parent != self.model_dir or path.suffix != ".joblib":
+                if path.parent != self.model_dir:
                     raise ModelLoadError(
                         "Model file must be directly inside model directory"
                     )
-                if spec.sklearn_version != sklearn.__version__:
-                    raise ModelLoadError("Training and serving sklearn versions differ")
-                contents = path.read_bytes()
-                if sha256(contents).hexdigest() != spec.sha256:
-                    raise ModelLoadError("Model checksum mismatch")
-                # Read once: the bytes whose checksum was checked are deserialized.
-                estimator = joblib.load(BytesIO(contents))
+                if spec.format == "deberta":
+                    self._check_deberta_files(path, spec)
+                    # Повторный выбор не создаёт вторую копию большой модели.
+                    if self._active is not None and self._active.spec.id == model_id:
+                        return self._active
+                    from company_reviews.deberta import DebertaClassifier
+
+                    estimator = DebertaClassifier(path)
+                else:
+                    if path.suffix != ".joblib":
+                        raise ModelLoadError("Expected a joblib model file")
+                    if spec.sklearn_version != sklearn.__version__:
+                        raise ModelLoadError(
+                            "Training and serving sklearn versions differ"
+                        )
+                    contents = path.read_bytes()
+                    if sha256(contents).hexdigest() != spec.sha256:
+                        raise ModelLoadError("Model checksum mismatch")
+                    # Read once: the bytes whose checksum was checked are deserialized.
+                    estimator = joblib.load(BytesIO(contents))
                 classes = getattr(estimator, "classes_", None)
                 if classes is None:
                     classes = getattr(
