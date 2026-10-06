@@ -59,7 +59,7 @@ DeBERTa уменьшает среднюю MAE на **0,04168 (22,48%)** отно
 | Файл или папка | Содержание |
 | --- | --- |
 | [notebooks/eda.ipynb](notebooks/eda.ipynb) | Данные, повторы, распределение оценок, гипотезы о признаках |
-| [notebooks/baselinev2.ipynb](notebooks/baselinev2.ipynb) | Медиана, понятные отдельные опыты, GridSearchCV и итоговая модель |
+| [notebooks/baseline.ipynb](notebooks/baseline.ipynb) | Медиана, понятные отдельные опыты, GridSearchCV и итоговая модель |
 | [notebooks/deberta.ipynb](notebooks/deberta.ipynb) | Настройки DeBERTa, пять фолдов и финальное обучение |
 | [docs/decisions.md](docs/decisions.md) | Обоснования выбора и результаты экспериментов |
 | `company_reviews/` | Признаки, обучение, экспорт моделей и сервис |
