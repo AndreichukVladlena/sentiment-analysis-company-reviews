@@ -10,7 +10,7 @@
 docker compose up --build -d --wait
 ```
 
-Обученные модели включены в репозиторий. Скачивать данные и обучать модель для запуска сервиса не нужно.
+Две обученные версии TF-IDF включены в репозиторий. Скачивать данные и обучать модель для запуска сервиса не нужно.
 
 - Swagger и примеры запросов: <http://localhost:8000/docs>
 - Проверка готовности: <http://localhost:8000/health>
@@ -51,7 +51,7 @@ curl http://localhost:8000/load_model \
 
 Признаки и параметры выбирались по этим же фолдам. Независимого тестового результата или Kaggle score нет.
 
-На первом фолде DeBERTa получила **0,14722**, MPNet + CatBoost — **0,44325**, основная TF-IDF-модель — **0,18881**. В API пока включены только две версии TF-IDF; проверка DeBERTa на остальных фолдах ещё не проведена.
+На том же первом фолде DeBERTa получила **0,14722**, основная TF-IDF-модель — **0,18881**. Пятифолдовый результат DeBERTa пока не готов. Её загрузка и прогнозирование в API проверены на весах первого фолда; финальная модель на всех данных обучается отдельно.
 
 ## Где что находится
 
@@ -59,9 +59,9 @@ curl http://localhost:8000/load_model \
 | --- | --- |
 | [notebooks/eda.ipynb](notebooks/eda.ipynb) | Данные, повторы, распределение оценок, гипотезы о признаках |
 | [notebooks/baselinev2.ipynb](notebooks/baselinev2.ipynb) | Медиана, понятные отдельные опыты, GridSearchCV и итоговая модель |
-| [notebooks/deberta.ipynb](notebooks/deberta.ipynb), [notebooks/mpnet_catboost.ipynb](notebooks/mpnet_catboost.ipynb) | Дополнительные модели |
+| [notebooks/deberta.ipynb](notebooks/deberta.ipynb) | Настройки DeBERTa, пять фолдов и финальное обучение |
 | [docs/decisions.md](docs/decisions.md) | Обоснования выбора и результаты экспериментов |
-| `company_reviews/` | Признаки, обучение и сервис |
+| `company_reviews/` | Признаки, обучение, экспорт моделей и сервис |
 | `models/` | Две обученные модели и каталог для `/load_model` |
 | `tests/` | Проверки признаков, обучения, API и истории запросов |
 
@@ -75,7 +75,7 @@ uv run --locked pytest -q
 uv run --locked python scripts/smoke_api.py
 ```
 
-Последняя команда проверяет уже работающий API. Ноутбуки используют ядро из `.venv`. Для трансформеров добавьте `--extra advanced` к команде `uv sync`.
+Последняя команда проверяет уже работающий API. Ноутбуки используют ядро из `.venv`. Для DeBERTa добавьте `--extra deberta` к команде `uv sync`.
 
 Для повторного обучения поместите файлы соревнования в `data/raw/`. Они не хранятся в Git. Основной baseline можно пройти в ноутбуке или запустить подбор и экспорт одной командой:
 
@@ -84,6 +84,29 @@ uv run --locked python -m company_reviews.training --tune
 ```
 
 Без `--tune` команда обучит модели с уже выбранными `C=4` и `min_df=5`.
+
+### DeBERTa
+
+Обучение пяти фолдов и отдельной финальной модели на всех данных:
+
+```bash
+.venv/bin/python -u -m company_reviews.deberta_training --mode all --device mps
+```
+
+`mps` используется на Apple Silicon; для CPU укажите `--device cpu`. Готовые фолды переиспользуются. Прерванная эпоха запускается заново. Для обучения только финальной модели есть `--mode full`.
+
+После завершения команда выведет путь к каталогу финальной модели. Подключение её к сервису:
+
+```bash
+.venv/bin/python -m company_reviews.export_deberta <путь-к-финальной-модели>
+MODEL_EXTRA=deberta docker compose up --build -d --wait
+curl http://localhost:8000/load_model \
+  -H 'Content-Type: application/json' -d '{"model_id": "deberta"}'
+```
+
+Экспорт копирует веса и токенизатор в `models/deberta/` и обновляет каталог моделей. Пересборка добавляет зависимости DeBERTa и перезапускает API с новым каталогом. TF-IDF остаётся моделью по умолчанию. Веса DeBERTa занимают около 740 МБ и не включены в Git; обычный запуск сервиса выше их не требует. Сервис использует CPU и первые 128 токенов отзыва.
+
+MPNet + CatBoost оставлен как отклонённый эксперимент в [отдельном ноутбуке](notebooks/mpnet_catboost.ipynb); в сервис он не включён.
 
 ## Использование ИИ
 
