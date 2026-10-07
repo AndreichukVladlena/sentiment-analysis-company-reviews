@@ -125,11 +125,21 @@ def build_pipeline(*, min_df=5, c=4, word_only=False, memory=None):
 
 
 def build_search(
-    *, memory=None, n_splits=5, c_values=(2, 4, 8), min_df_values=(2, 3, 5), verbose=2
+    *,
+    memory=None,
+    n_splits=5,
+    c_values=(2, 4, 8),
+    min_df_values=(2, 3, 5),
+    numeric_weight_values=(0.05, 0.1, 0.2),
+    verbose=2,
 ):
     return GridSearchCV(
         build_pipeline(memory=memory),
-        {"classifier__C": list(c_values), "features__min_df": list(min_df_values)},
+        {
+            "classifier__C": list(c_values),
+            "features__min_df": list(min_df_values),
+            "features__numeric_weight": list(numeric_weight_values),
+        },
         scoring=negative_median_mae,
         cv=StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=2026),
         n_jobs=1,
@@ -221,7 +231,7 @@ def main():
     parser.add_argument("--data", type=Path, default=Path("data/raw/train.csv"))
     parser.add_argument("--output", type=Path, default=Path("models"))
     parser.add_argument(
-        "--tune", action="store_true", help="Run the 9-combination grid search"
+        "--tune", action="store_true", help="Run the 27-combination grid search"
     )
     args = parser.parse_args()
 
@@ -241,7 +251,9 @@ def main():
             print(f"Parameters: {search.best_params_}")
             print(f"Mean CV MAE: {-search.best_score_:.5f}")
         else:
-            full_model = build_pipeline()
+            full_model = build_pipeline(min_df=2, c=4).set_params(
+                features__numeric_weight=0.05
+            )
             full_model.fit(reviews, labels)
 
         word_model = build_pipeline(word_only=True)
