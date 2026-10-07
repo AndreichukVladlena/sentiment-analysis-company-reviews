@@ -1,46 +1,40 @@
-# Передача финальной DeBERTa
+# Финальная DeBERTa через Git LFS
 
-Стандартный репозиторий запускается одной командой `docker compose up --build -d --wait`: в Git включены две компактные TF-IDF-модели. DeBERTa передаётся отдельным файлом. Архив подготовлен и проверен локально; публичной ссылки пока нет. Для публикации нужно отдельно разместить архив и его `.sha256`, например в GitHub Release, и добавить ссылку в README. Обычный Git push не подходит для файла весов размером около 738 МБ.
+Финальная модель поставляется в `models/deberta/` вместе с проектом. Большой файл `model.safetensors` хранится в Git LFS, а токенизатор, конфигурации и контрольные суммы в `models/manifest.json` — в обычном Git. Отдельный архив и локальный кэш автора не нужны.
 
-## Что передать проверяющему
+## Получение готовой модели
 
-- Репозиторий с кодом, выполненными ноутбуками и инструкциями.
-- `deberta-full-33305736a2d2.tar.gz` — 458 722 804 байта (около 459 МБ).
-- `deberta-full-33305736a2d2.tar.gz.sha256` — контрольная сумма архива.
+Нужны Git, установленный [Git LFS](https://git-lfs.com/) и работающий Docker с Compose. Python и PyTorch на хосте для запуска контейнера не требуются.
 
-SHA256 архива:
-
-```text
-66f5266442982d051e9a018901e07c820222c5af2f99c07c1ef695037148e761
+```bash
+git clone https://github.com/AndreichukVladlena/sentiment-analysis-company-reviews.git
+cd sentiment-analysis-company-reviews
+git lfs install --local
+git lfs pull --include="models/deberta/model.safetensors"
+git lfs fsck
 ```
 
-Внутри только каталог `deberta/`: `model.safetensors`, `config.json`, `spm.model`, `tokenizer_config.json`, `special_tokens_map.json`, `added_tokens.json`, `training_config.json`. Данные Kaggle и фолдовые checkpoint в поставку не входят. Все семь файлов архива сверены с экспортированным каталогом API. Распакованный каталог занимает около 740 МБ.
+При уже настроенном Git LFS веса обычно загружаются при клонировании. Явный `git lfs pull` также подходит для ранее клонированного проекта после `git pull`. Не продолжайте сборку DeBERTa, если скачивание или проверка завершились ошибкой.
 
-Это **отдельная модель на всех 59 976 очищенных отзывах**, `training_scope="full"`, max length 128, медленный токенизатор. SHA256 файла `model.safetensors`:
+Без LFS вместо весов может остаться небольшой текстовый файл, начинающийся с `version https://git-lfs.github.com/spec/v1`. Это указатель, а не модель. Выполните команды LFS выше; одного обычного `git pull` недостаточно, если загрузка больших файлов была пропущена. Предпочитайте `git clone` скачиванию ZIP: включение LFS-объектов в архивы зависит от настроек GitHub.
+
+## Состав и проверка
+
+Каталог содержит семь файлов: `model.safetensors`, `config.json`, `spm.model`, `tokenizer_config.json`, `special_tokens_map.json`, `added_tokens.json`, `training_config.json`. Данные Kaggle и модели пяти фолдов в поставку не входят. Каталог занимает около 740 МБ.
+
+Это отдельная модель, обученная на всех **59 976** очищенных отзывах: `training_scope="full"`, максимум 128 токенов и исходный медленный токенизатор. SHA256 поставляемого файла весов:
 
 ```text
 28e21afd362a6fe6ca3cca7d5a80e705e2d30c7168802c6f72ee66b30c9315d9
 ```
 
-## Подключение полученного архива
+На macOS проверьте его командой `shasum -a 256 models/deberta/model.safetensors`, на Linux — `sha256sum models/deberta/model.safetensors`. Сервис дополнительно сверяет контрольные суммы всех семи файлов при загрузке модели.
 
-Нужны Docker Compose и Python 3.12 или новее. Экспорт использует только стандартную библиотеку Python; устанавливать PyTorch на хост не требуется. Поместите архив и файл контрольной суммы в одну папку вне репозитория. В этой папке проверьте архив:
+## Запуск API
 
-```bash
-shasum -a 256 -c deberta-full-33305736a2d2.tar.gz.sha256
-```
-
-На Linux вместо `shasum -a 256` можно использовать `sha256sum`. Продолжайте только при результате `OK`. Распакуйте в отдельную папку:
+Из корня проекта после успешного получения весов:
 
 ```bash
-mkdir checkpoint
-tar -xzf deberta-full-33305736a2d2.tar.gz -C checkpoint
-```
-
-Из корня репозитория, указав фактический абсолютный путь к распакованному каталогу:
-
-```bash
-python3 -m company_reviews.export_deberta /absolute/path/checkpoint/deberta
 MODEL_EXTRA=deberta docker compose up --build -d --wait
 curl http://localhost:8000/load_model \
   -H 'Content-Type: application/json' -d '{"model_id":"deberta"}'
@@ -48,10 +42,40 @@ curl http://localhost:8000/predict \
   -H 'Content-Type: application/json' -d '{"Review":"Excellent service and fast delivery!"}'
 ```
 
-Экспорт создаёт игнорируемый Git каталог `models/deberta/` и локально добавляет модель в `models/manifest.json`. Сервис при загрузке проверяет SHA256 каждого файла. Не коммитьте изменённый manifest без весов: иначе обычный клон будет содержать запись недоступной модели. Чтобы сохранить стандартную рабочую копию, экспорт и сборку можно выполнить в отдельной копии репозитория. Для повторных сборок этой копии сохраняйте `MODEL_EXTRA=deberta`.
+`MODEL_EXTRA=deberta` добавляет зависимости DeBERTa в образ; используйте переменную при каждой его пересборке. Все файлы модели копируются в образ. Во время предсказаний доступ к Hugging Face не нужен; первая сборка требует доступа к реестрам образов и Python-пакетов.
 
-TF-IDF остаётся моделью по умолчанию, в том числе после рестарта. Для DeBERTa выполните `/load_model` снова. Все веса встроены в образ; во время инференса доступ к Hugging Face не нужен. Первая сборка требует доступа к реестрам образов и Python-пакетов.
+TF-IDF остаётся моделью по умолчанию, в том числе после рестарта. Для DeBERTa повторно вызовите `/load_model`. Наличие записи `deberta` в `/models` означает регистрацию модели, но не подтверждает получение её весов и установку зависимостей. Если загрузка не удалась, предыдущая модель остаётся активной.
 
-## Что проверено
+## Запуск только baseline
 
-Full-checkpoint прошёл реальные single/batch-запросы, выбор медианной оценки 1–5 и вероятности выбранной оценки, переключение TF-IDF → DeBERTa → TF-IDF и запись истории в SQLite. В Linux arm64-контейнере с 2 CPU и 2 ГБ памяти все 15 ответов совпали с macOS CPU. После прогрева HTTP p50 — 0,217 с, p95 — 0,432 с; загрузка и проверка файлов при переключении — 6,80 с. История сохраняется после рестарта. Это функциональная проверка и небольшой замер задержек; качество модели оценивается по пятифолдовой MAE 0,143707.
+Две компактные TF-IDF-модели находятся в обычном Git. Если DeBERTa не нужна, можно пропустить скачивание её весов:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/AndreichukVladlena/sentiment-analysis-company-reviews.git
+cd sentiment-analysis-company-reviews
+docker compose up --build -d --wait
+```
+
+Для последующего подключения DeBERTa выполните получение весов и пересборку из разделов выше. Исходные данные и повторное обучение для готовой поставки не нужны.
+
+## Публикация новых весов
+
+Этот раздел нужен только после собственного финального обучения. Экспорт использует стандартную библиотеку Python и принимает полный совместимый checkpoint:
+
+```bash
+python3 -m company_reviews.export_deberta /path/to/full-checkpoint
+git lfs install --local
+git add models/deberta models/manifest.json
+git diff --cached --stat
+git show :models/deberta/model.safetensors
+git lfs status
+git commit -m "feat: update final DeBERTa weights"
+git lfs fsck
+git push origin main
+```
+
+Перед коммитом `git show` должен вывести короткий LFS-указатель, а не бинарные данные. Правило в `.gitattributes` применяется только к финальному файлу весов. Не добавляйте `data/cache/` и модели проверочных фолдов. Коммитьте веса, токенизатор, конфигурации и manifest вместе; при изменении весов обновите также контрольную сумму в этой инструкции.
+
+Обычный `git push` с установленным LFS использует pre-push hook для загрузки больших файлов. Не отключайте этот hook. Каждая новая версия весов занимает дополнительное место, а скачивания расходуют LFS-трафик владельца репозитория. Перед публикацией проверьте [квоты и бюджет Git LFS](https://docs.github.com/en/billing/concepts/product-billing/git-lfs); при исчерпании квоты скачивание может стать недоступным.
+
+Кросс-валидация оценивает выбранный подход; отдельной независимой оценки качества финальной модели нет.

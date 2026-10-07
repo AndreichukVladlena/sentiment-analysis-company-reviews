@@ -1,7 +1,6 @@
 # Kaggle competition data stays local and is not published with the repository.
 /data/raw/
 /data/cache/
-/models/deberta/
 
 # Local Python and notebook artifacts.
 .venv/

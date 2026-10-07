@@ -16,6 +16,22 @@
       "description": "Word and bigram TF-IDF",
       "sha256": "5e6fb34e13d562bd536933c1fb83428dacd539d6c8ed9d1d893940e116d52e6c",
       "sklearn_version": "1.9.1"
+    },
+    {
+      "id": "deberta",
+      "format": "deberta",
+      "filename": "deberta",
+      "version": "full-28e21afd362a",
+      "description": "DeBERTa-v3-base: финальное обучение на всех данных, 128 токенов",
+      "file_sha256": {
+        "added_tokens.json": "dc046d04c9b0ada7ae6f1dc89c465801799acdf0c9a6aab8c15a1b2d5ca4e91f",
+        "config.json": "8bf9356f283c7cd699eda7fe7f00216d6c11349cabf150515a583c3b517595fd",
+        "model.safetensors": "28e21afd362a6fe6ca3cca7d5a80e705e2d30c7168802c6f72ee66b30c9315d9",
+        "special_tokens_map.json": "9463f61e1b109a8eb4688b829260d7c6b1e6dff04c98ff7269bb89e2b92369b9",
+        "spm.model": "c679fbf93643d19aab7ee10c0b99e460bdbc02fedf34b92b05af343b4af586fd",
+        "tokenizer_config.json": "e6c4c771911c211618a2d46488dc7e9e499f051773cd4ff4faeca6fe55fdf569",
+        "training_config.json": "20d9fa4dec696d56ac9319f225c2592afbb777e1b36baea277034641bf458752"
+      }
     }
   ]
 }
