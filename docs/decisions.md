@@ -87,17 +87,14 @@ TF-IDF по словам содержит униграммы и биграммы
 
 Постоянная медиана даёт 1,43781 MAE. По оценкам 2 / 3 / 4 полная модель всё ещё ошибается в среднем на 1,0135 / 1,2245 / 0,8325 балла. Редкие промежуточные оценки — главное слабое место baseline.
 
-## 5. MPNet + CatBoost и DeBERTa
+## 5. DeBERTa
 
 Все строки таблицы оценены на **одном и том же первом фолде**:
 
 | Модель | MAE |
 | --- | ---: |
 | TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression | 0,18881 |
-| Замороженный MPNet + CatBoostRegressor | 0,44325 |
 | Частично дообученная DeBERTa-v3-base | **0,14722** |
-
-MPNet превращает отзыв в 768 чисел; CatBoost обучается на них с функцией потерь MAE. Ограничение входа — 256 токенов. Качество хуже TF-IDF, поэтому связка остаётся отдельным экспериментом и не включена в API.
 
 У DeBERTa обучены два верхних слоя энкодера, pooler и классификатор: одна эпоха, максимум 128 токенов. На выборке 5 000 отзывов около 13,7% оказались длиннее этого предела. После первого опыта настройки зафиксированы: batch size 8, encoder LR 3e-5, head LR 1e-4, AdamW (`foreach=False`), прогрев 5%, ограничение нормы градиента 1, seed 2026. Используется медленный токенизатор и ревизия `8ccc9b6f36199bec6961081d44eb72fb3f7353f3`.
 
@@ -161,7 +158,7 @@ FastAPI предоставляет `/predict`, `/load_model`, `/models`, `/healt
 - [Wang & Manning, 2012](https://aclanthology.org/P12-2018/) — линейные текстовые модели как сильный ориентир для тональности.
 - [TfidfVectorizer](https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfVectorizer.html) — определения признаков, частотных порогов и предела словаря.
 - [GridSearchCV](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html) и [Pipeline](https://scikit-learn.org/stable/modules/generated/sklearn.pipeline.Pipeline.html) — подбор параметров с предобработкой внутри фолдов.
-- Карточки [MPNet](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) и [DeBERTa-v3-base](https://huggingface.co/microsoft/deberta-v3-base) — назначение и устройство исходных моделей.
+- Карточка [DeBERTa-v3-base](https://huggingface.co/microsoft/deberta-v3-base) — назначение и устройство исходной модели.
 - [Transformers: сохранение и загрузка модели](https://huggingface.co/docs/transformers/v4.57.1/en/main_classes/model) — локальный каталог весов и конфигурации; токенизатор сохраняется вместе с моделью.
 - [uv и PyTorch](https://docs.astral.sh/uv/guides/integration/pytorch/) — отдельный CPU-индекс для Linux, обычная сборка с MPS для macOS.
 
