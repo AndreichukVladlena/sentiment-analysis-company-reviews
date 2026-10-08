@@ -42,7 +42,7 @@ class ModelSpec(BaseModel):
         if self.format == "deberta" and not self.file_sha256:
             raise ValueError("DeBERTa requires per-file checksums")
         if self.format == "deberta":
-            # История хранит один отпечаток всех файлов, включая токенизатор.
+            # History stores a single fingerprint of all files, including the tokenizer.
             self.sha256 = sha256(
                 json.dumps(self.file_sha256, sort_keys=True).encode("utf-8")
             ).hexdigest()
@@ -125,7 +125,7 @@ class ModelRegistry:
             file = (path / name).resolve()
             if file.parent != path or not file.is_file():
                 raise ModelLoadError("DeBERTa files must stay inside their directory")
-            # Не держим ещё одну копию весов (~740 МБ) в памяти для проверки хеша.
+            # Check the hash without keeping another copy of the weights (~740 MB) in memory.
             with file.open("rb") as source:
                 if file_digest(source, "sha256").hexdigest() != checksum:
                     raise ModelLoadError("DeBERTa file checksum mismatch")
@@ -144,7 +144,7 @@ class ModelRegistry:
                     )
                 if spec.format == "deberta":
                     self._check_deberta_files(path, spec)
-                    # Повторный выбор не создаёт вторую копию большой модели.
+                    # Selecting the same model again does not create another copy in memory.
                     if self._active is not None and self._active.spec.id == model_id:
                         return self._active
                     from company_reviews.deberta import DebertaClassifier

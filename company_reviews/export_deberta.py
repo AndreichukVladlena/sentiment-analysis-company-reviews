@@ -50,7 +50,7 @@ def export_deberta(checkpoint, output=Path("models")):
         | {name for name in OPTIONAL_FILES if (checkpoint / name).is_file()}
     )
 
-    # Сначала копируем и проверяем всё; незавершённая копия не заменяет старые веса.
+    # Copy and verify all files before replacing the existing weights.
     with TemporaryDirectory(prefix=".deberta-export-", dir=output) as temporary:
         staging = Path(temporary)
         hashes = {}

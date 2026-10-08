@@ -21,7 +21,7 @@ class DebertaClassifier:
             raise ValueError("DeBERTa должна возвращать пять оценок")
         self.model.eval()
         self.classes_ = np.arange(1, 6)
-        # Параллельные HTTP-запросы не должны умножать память рабочих батчей.
+        # Concurrent HTTP requests must not multiply memory usage for inference batches.
         self._inference_lock = Lock()
 
     def predict_proba(self, reviews: Sequence[str]) -> np.ndarray:
