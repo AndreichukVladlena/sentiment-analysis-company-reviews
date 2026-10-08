@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 from time import perf_counter
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -31,12 +31,16 @@ class ReviewRow(BaseModel):
         default=None,
         ge=-(2**63),
         le=2**63 - 1,
-        description="Необязательный целочисленный Id строки датасета; не используется моделью.",
+        description="Необязательный целочисленный Id строки датасета, он не используется моделью.",
+        examples=[1],
     )
     Review: str = Field(
         min_length=1,
         max_length=20_000,
-        description="Текст отзыва: 1–20 000 символов, содержит хотя бы один непробельный символ.",
+        description=(
+            "Англоязычный отзыв: 1–20 000 символов. "
+            "Строка не должна состоять только из пробелов."
+        ),
         examples=["Fast delivery and helpful customer support."],
     )
 
@@ -57,12 +61,16 @@ ReviewBatch = Annotated[list[ReviewRow], Field(min_length=1, max_length=128)]
 
 class Prediction(BaseModel):
     label: int = Field(
-        ge=1, le=5, description="Оценка 1–5: медиана распределения модели."
+        ge=1,
+        le=5,
+        description="Оценка 1–5, выбранная как медиана распределения модели.",
+        examples=[5],
     )
     confidence: float = Field(
         ge=0,
         le=1,
-        description="Вероятность выбранной оценки; не гарантия правильности прогноза.",
+        description="Оценённая моделью вероятность выбранной оценки.",
+        examples=[0.98],
     )
 
 
@@ -70,9 +78,79 @@ class ModelSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     model_id: str = Field(
         pattern=r"^[a-zA-Z0-9_-]{1,64}$",
-        description="Идентификатор из GET /models. Файлы и URL не принимаются.",
+        description="Идентификатор модели из GET /models, например tfidf или deberta.",
         examples=["tfidf"],
     )
+
+
+class ModelState(BaseModel):
+    model_id: str = Field(description="Активная модель.", examples=["tfidf"])
+    model_version: str = Field(
+        description="Версия загруженных файлов модели.",
+        examples=["2026-10-07T08:28:11+00:00"],
+    )
+
+
+class HealthStatus(ModelState):
+    status: Literal["ok"] = Field(
+        description="API отвечает, активная модель загружена."
+    )
+
+
+class ModelInfo(BaseModel):
+    id: str = Field(
+        description="Идентификатор для POST /load_model.", examples=["tfidf"]
+    )
+    version: str = Field(
+        description="Версия файлов модели.", examples=["2026-10-07T08:28:11+00:00"]
+    )
+    description: str = Field(
+        description="Краткое описание модели.",
+        examples=[
+            "TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression"
+        ],
+    )
+
+
+class ModelCatalog(BaseModel):
+    active_model: str = Field(description="Активная модель.", examples=["tfidf"])
+    models: list[ModelInfo] = Field(
+        description="Модели, зарегистрированные в каталоге.",
+        examples=[
+            [
+                {
+                    "id": "tfidf",
+                    "version": "2026-10-07T08:28:11+00:00",
+                    "description": "TF-IDF по словам и символам + 13 числовых признаков + Logistic Regression",
+                },
+                {
+                    "id": "word-only",
+                    "version": "2026-10-07T08:28:11+00:00",
+                    "description": "Word and bigram TF-IDF",
+                },
+                {
+                    "id": "deberta",
+                    "version": "full-28e21afd362a",
+                    "description": "DeBERTa-v3-base: финальное обучение на всех данных, 128 токенов",
+                },
+            ]
+        ],
+    )
+
+
+class ErrorResponse(BaseModel):
+    detail: str = Field(description="Причина ошибки.")
+
+
+class ValidationIssue(BaseModel):
+    loc: list[str | int] = Field(
+        description="Путь к ошибке: тело запроса, поле или индекс элемента массива."
+    )
+    message: str = Field(description="Какое требование к данным нарушено.")
+
+
+class ValidationErrorResponse(BaseModel):
+    detail: list[ValidationIssue] = Field(description="Ошибки в данных запроса.")
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -104,15 +182,40 @@ def create_app(
         title="Оценка отзывов компаний",
         version="1.0.0",
         description=(
-            "Прогноз оценки отзыва от 1 до 5. Один объект возвращает один прогноз; "
-            "массив — массив в исходном порядке. Модель и история загружаются при запуске. "
-            "Сервис рассчитан на один процесс Uvicorn. Swagger: /docs."
+            "Прогноз оценки компании **от 1 до 5** по англоязычному отзыву.\n\n"
+            "После запуска активна `tfidf`. Доступные модели перечислены в `GET /models`, "
+            "для переключения используйте `POST /load_model`."
         ),
+        openapi_tags=[
+            {
+                "name": "Прогноз",
+                "description": "Оценка одного отзыва или массива отзывов.",
+            },
+            {
+                "name": "Модели",
+                "description": "Каталог моделей и выбор активной модели.",
+            },
+            {"name": "Сервис", "description": "Проверка готовности API."},
+        ],
+        swagger_ui_parameters={
+            "defaultModelsExpandDepth": 0,
+            "displayRequestDuration": True,
+        },
         lifespan=lifespan,
     )
     application.add_exception_handler(RequestValidationError, validation_error_handler)
 
-    @application.get("/health", summary="Проверить готовность сервиса", tags=["Сервис"])
+    @application.get(
+        "/health",
+        response_model=HealthStatus,
+        summary="Проверить готовность сервиса",
+        description=(
+            "Возвращает `ok`, идентификатор и версию активной модели. "
+            "Запрос не выполняет прогноз и не записывается в историю."
+        ),
+        response_description="Сервис отвечает, активная модель загружена.",
+        tags=["Сервис"],
+    )
     def health():
         active = application.state.registry.snapshot()
         return {
@@ -121,7 +224,19 @@ def create_app(
             "model_version": active.spec.version,
         }
 
-    @application.get("/models", summary="Доступные локальные модели", tags=["Модели"])
+    @application.get(
+        "/models",
+        response_model=ModelCatalog,
+        summary="Посмотреть доступные модели",
+        description=(
+            "Возвращает каталог моделей и идентификатор активной модели. "
+            "Передайте `id` выбранной модели в `POST /load_model`.\n\n"
+            "Наличие модели в каталоге не подтверждает готовность её файлов: "
+            "для `deberta` нужны скачанные веса и сборка с `MODEL_EXTRA=deberta`."
+        ),
+        response_description="Каталог моделей и текущий выбор.",
+        tags=["Модели"],
+    )
     def models():
         registry = application.state.registry
         return {
@@ -138,30 +253,86 @@ def create_app(
 
     @application.post(
         "/load_model",
+        response_model=ModelState,
         summary="Переключить активную модель",
         tags=["Модели"],
         description=(
-            "Выберите model_id из GET /models. Сервис проверит контрольные суммы файлов "
-            "(и версию sklearn для TF-IDF) "
-            "и пробный прогноз, затем атомарно переключит модель. Ошибка загрузки "
-            "сохраняет предыдущую модель. После перезапуска выбирается модель по умолчанию."
+            "Передайте `model_id` из `GET /models`. Выбор действует для всех последующих "
+            "запросов к сервису. Уже начатые прогнозы завершатся с прежней моделью.\n\n"
+            "Переключение выполняется после проверки файлов и загрузки модели, "
+            "это может занять несколько секунд. При ошибке прежняя модель остаётся активной. "
+            "После перезапуска сервиса снова выбирается `tfidf`."
         ),
+        response_description="Идентификатор и версия выбранной модели.",
         responses={
-            404: {"description": "Неизвестный model_id"},
-            503: {"description": "Модель не прошла проверку"},
+            404: {
+                "model": ErrorResponse,
+                "description": "Модель с таким model_id не зарегистрирована.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "detail": "Неизвестная модель, выберите model_id из GET /models"
+                        }
+                    }
+                },
+            },
+            422: {
+                "model": ValidationErrorResponse,
+                "description": "Отсутствует model_id или нарушен формат запроса.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "detail": [
+                                {
+                                    "loc": ["body", "model_id"],
+                                    "message": "Field required",
+                                }
+                            ]
+                        }
+                    }
+                },
+            },
+            503: {
+                "model": ErrorResponse,
+                "description": "Не удалось загрузить модель. Прежняя остаётся активной.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "detail": "Модель не прошла проверку, предыдущая модель остаётся активной"
+                        }
+                    }
+                },
+            },
         },
     )
-    def load_model(selection: ModelSelection):
+    def load_model(
+        selection: Annotated[
+            ModelSelection,
+            Body(
+                openapi_examples={
+                    "tfidf": {
+                        "summary": "TF-IDF: слова, символы и числовые признаки",
+                        "value": {"model_id": "tfidf"},
+                    },
+                    "word-only": {
+                        "summary": "TF-IDF: слова и биграммы",
+                        "value": {"model_id": "word-only"},
+                    },
+                    "deberta": {"summary": "DeBERTa", "value": {"model_id": "deberta"}},
+                }
+            ),
+        ],
+    ):
         try:
             active = application.state.registry.load(selection.model_id)
         except UnknownModelError:
             raise HTTPException(
-                404, "Неизвестная модель; выберите model_id из GET /models"
+                404, "Неизвестная модель, выберите model_id из GET /models"
             ) from None
         except ModelLoadError:
             LOGGER.exception("Registered model loading failed")
             raise HTTPException(
-                503, "Модель не прошла проверку; предыдущая модель остаётся активной"
+                503, "Модель не прошла проверку, предыдущая модель остаётся активной"
             ) from None
         return {"model_id": active.spec.id, "model_version": active.spec.version}
 
@@ -171,19 +342,87 @@ def create_app(
         summary="Предсказать оценку отзыва",
         tags=["Прогноз"],
         description=(
-            "Принимает строку датасета {Id, Review} или массив из 1–128 строк. Id необязателен. "
-            "Review: до 20 000 символов; суммарно до 200 000 символов на запрос. "
-            "DeBERTa использует первые 128 токенов и обрабатывает отзывы на CPU "
-            "внутренними батчами до 8 строк. "
-            "label — медиана распределения для минимизации MAE; confidence — вероятность "
-            "именно этой оценки, которая может отличаться от наиболее вероятной оценки. "
-            "Это не гарантия правильности. История успешных прогнозов сохраняется в SQLite; "
-            "исходный текст по умолчанию не сохраняется. Заголовки X-Model-Id, X-Model-Version "
-            "и X-Request-Id позволяют связать ответ с моделью и историей."
+            "Передайте объект с полем `Review` или массив таких объектов. `Id` необязателен. "
+            "Один отзыв возвращает один объект, массив — массив ответов в исходном порядке.\n\n"
+            "**Ограничения**\n\n"
+            "- `Review`: англоязычный текст от 1 до 20 000 символов, не только пробелы.\n"
+            "- Массив: от 1 до 128 отзывов, суммарно до 200 000 символов текста.\n"
+            "- Дополнительные поля запрещены.\n"
+            "- DeBERTa использует первые 128 токенов отзыва, включая служебные.\n\n"
+            "**Результат**\n\n"
+            "`label` — оценка 1–5, выбранная как медиана распределения для метрики MAE. "
+            "`confidence` — оценённая моделью вероятность выбранной оценки. \n\n"
+            "Обработанный запрос и ответы сохраняются в SQLite, тексты отзывов по умолчанию "
+            "не записываются. Заголовки ответа содержат модель, её версию и идентификатор запроса."
         ),
+        response_description="Оценка и её вероятность для каждого переданного отзыва.",
         responses={
-            422: {"description": "Некорректные поля или превышены ограничения"},
-            503: {"description": "Ошибка модели или записи истории"},
+            200: {
+                "headers": {
+                    "X-Model-Id": {
+                        "description": "Модель, выполнившая прогноз.",
+                        "schema": {"type": "string"},
+                    },
+                    "X-Model-Version": {
+                        "description": "Версия файлов модели.",
+                        "schema": {"type": "string"},
+                    },
+                    "X-Request-Id": {
+                        "description": "Идентификатор запроса в истории SQLite.",
+                        "schema": {"type": "string"},
+                    },
+                },
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "single": {
+                                "summary": "Один отзыв",
+                                "value": {"label": 5, "confidence": 0.98},
+                            },
+                            "batch": {
+                                "summary": "Два отзыва",
+                                "value": [
+                                    {"label": 5, "confidence": 0.98},
+                                    {"label": 1, "confidence": 0.91},
+                                ],
+                            },
+                        }
+                    }
+                },
+            },
+            422: {
+                "model": ValidationErrorResponse | ErrorResponse,
+                "description": "Некорректные поля, JSON или превышение ограничений. Прогноз не выполнен.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "detail": "Суммарная длина Review превышает 200 000 символов"
+                        }
+                    }
+                },
+            },
+            503: {
+                "model": ErrorResponse,
+                "description": "Не удалось выполнить прогноз или сохранить историю запроса.",
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "model": {
+                                "summary": "Ошибка прогнозирования",
+                                "value": {
+                                    "detail": "Модель не смогла обработать запрос"
+                                },
+                            },
+                            "history": {
+                                "summary": "История недоступна",
+                                "value": {
+                                    "detail": "История временно недоступна, повторите запрос позже"
+                                },
+                            },
+                        }
+                    }
+                },
+            },
         },
     )
     def predict(
@@ -234,7 +473,7 @@ def create_app(
         except (sqlite3.Error, OSError):
             LOGGER.exception("Request history could not be saved")
             raise HTTPException(
-                503, "История временно недоступна; повторите запрос позже"
+                503, "История временно недоступна, повторите запрос позже"
             ) from None
         response.headers["X-Model-Id"] = active.spec.id
         response.headers["X-Model-Version"] = active.spec.version
