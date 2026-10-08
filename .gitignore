@@ -7,7 +7,6 @@
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
-.pytest_cache/
 .DS_Store
 .ruff_cache/
 /to-improve.md
