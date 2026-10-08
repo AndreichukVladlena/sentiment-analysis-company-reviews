@@ -46,6 +46,41 @@ class HistoryStore:
         connection.execute("PRAGMA foreign_keys=ON")
         return connection
 
+    def read(self, *, limit: int, offset: int) -> list[dict]:
+        with closing(self._connect()) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """
+                SELECT request_id, created_at, model_id, model_version,
+                       item_count, inference_ms
+                FROM requests
+                ORDER BY created_at DESC, request_id DESC
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            ).fetchall()
+            requests = [dict(row) | {"predictions": []} for row in rows]
+            if not requests:
+                return []
+
+            by_id = {request["request_id"]: request for request in requests}
+            placeholders = ",".join("?" for _ in requests)
+            predictions = connection.execute(
+                f"""
+                SELECT request_id, item_index, dataset_id, review_text, label, confidence
+                FROM predictions
+                WHERE request_id IN ({placeholders})
+                ORDER BY item_index
+                """,
+                tuple(by_id),
+            )
+            for row in predictions:
+                prediction = dict(row)
+                request_id = prediction.pop("request_id")
+                by_id[request_id]["predictions"].append(prediction)
+
+            return requests
+
     def record(
         self,
         rows: Sequence[tuple[int | None, str]],

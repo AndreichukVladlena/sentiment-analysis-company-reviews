@@ -8,7 +8,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Annotated, Literal
 
-from fastapi import Body, FastAPI, HTTPException, Request, Response
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -80,6 +80,43 @@ class ModelSelection(BaseModel):
         pattern=r"^[a-zA-Z0-9_-]{1,64}$",
         description="Идентификатор модели из GET /models, например tfidf или deberta.",
         examples=["tfidf"],
+    )
+
+
+class HistoryPrediction(Prediction):
+    item_index: int = Field(
+        ge=0, description="Позиция отзыва в запросе, начиная с 0.", examples=[0]
+    )
+    dataset_id: int | None = Field(
+        description="Переданный Id отзыва; null, если Id не был указан.", examples=[1, None]
+    )
+    review_text: str | None = Field(
+        description="Сохранённый текст отзыва; null, если сохранение было выключено.",
+        examples=["Excellent service!", None],
+    )
+
+
+class HistoryRequest(BaseModel):
+    request_id: str = Field(
+        description="Идентификатор запроса из заголовка X-Request-Id.",
+        examples=["a5c762ff96b945b7a4d619e530f026e8"],
+    )
+    created_at: str = Field(
+        description="Время запроса в UTC; +00:00 обозначает часовой пояс UTC.",
+        examples=["2026-10-08T19:59:55.079781+00:00"],
+    )
+    model_id: str = Field(description="Модель, выполнившая прогноз.", examples=["tfidf"])
+    model_version: str = Field(
+        description="Версия использованной модели.",
+        examples=["2026-10-07T08:28:11+00:00"],
+    )
+    item_count: int = Field(description="Количество отзывов в запросе.", examples=[1])
+    inference_ms: float = Field(
+        description="Время прогнозирования всего запроса, мс; без записи в SQLite.",
+        examples=[12.5],
+    )
+    predictions: list[HistoryPrediction] = Field(
+        description="Прогнозы в порядке отзывов исходного запроса."
     )
 
 
@@ -184,7 +221,8 @@ def create_app(
         description=(
             "Прогноз оценки компании **от 1 до 5** по англоязычному отзыву.\n\n"
             "После запуска активна `tfidf`. Доступные модели перечислены в `GET /models`, "
-            "для переключения используйте `POST /load_model`."
+            "для переключения используйте `POST /load_model`. "
+            "История успешных прогнозов доступна в `GET /history`."
         ),
         openapi_tags=[
             {
@@ -196,6 +234,7 @@ def create_app(
                 "description": "Каталог моделей и выбор активной модели.",
             },
             {"name": "Сервис", "description": "Проверка готовности API."},
+            {"name": "История", "description": "Сохранённые запросы и прогнозы."},
         ],
         swagger_ui_parameters={
             "defaultModelsExpandDepth": 0,
@@ -250,6 +289,137 @@ def create_app(
                 for spec in registry.manifest.models
             ],
         }
+
+    @application.get(
+        "/history",
+        response_model=list[HistoryRequest],
+        summary="Посмотреть историю прогнозов",
+        tags=["История"],
+        description=(
+            "Возвращает историю успешных запросов к `POST /predict`, начиная с новых. "
+            "Обращения к другим эндпоинтам и запросы с ошибками не включаются.\n\n"
+            "**Просмотр порциями**\n\n"
+            "- `limit`: сколько запросов вернуть, от 1 до 100; по умолчанию 10.\n"
+            "- `offset`: сколько новых запросов пропустить; по умолчанию 0.\n"
+            "- При `limit=10`: `offset=0` — первые 10, `offset=10` — следующие 10.\n"
+            "- Пустая история или `offset` за её пределами возвращают `200` и `[]`.\n\n"
+            "**Результат**\n\n"
+            "Каждый элемент — один запрос с временем, моделью и массивом `predictions`. "
+            "Прогнозы батча остаются вместе и идут в исходном порядке: "
+            "`limit` считает запросы, а не отдельные отзывы. "
+            "`request_id` совпадает с заголовком `X-Request-Id` ответа `/predict`.\n\n"
+            "`review_text` содержит текст, если во время прогноза было включено "
+            "`STORE_REVIEW_TEXT=1`. Иначе возвращается `null`, "
+            "включение настройки не восстанавливает тексты старых записей. "
+        ),
+        response_description="Сохранённые запросы и их прогнозы.",
+        responses={
+            200: {
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "history": {
+                                "summary": "История запросов от новых к старым",
+                                "value": [
+                                    {
+                                        "request_id": "a5c762ff96b945b7a4d619e530f026e8",
+                                        "created_at": "2026-10-08T19:59:55+00:00",
+                                        "model_id": "tfidf",
+                                        "model_version": "2026-10-07T08:28:11+00:00",
+                                        "item_count": 1,
+                                        "inference_ms": 12.5,
+                                        "predictions": [
+                                            {
+                                                "item_index": 0,
+                                                "dataset_id": 1,
+                                                "review_text": "Excellent service!",
+                                                "label": 5,
+                                                "confidence": 0.98,
+                                            }
+                                        ],
+                                    },
+                                    {
+                                        "request_id": "b7d026e862a94ea8a5c761ff96b945c3",
+                                        "created_at": "2026-10-08T18:00:00+00:00",
+                                        "model_id": "deberta",
+                                        "model_version": "full-28e21afd362a",
+                                        "item_count": 1,
+                                        "inference_ms": 217.0,
+                                        "predictions": [
+                                            {
+                                                "item_index": 0,
+                                                "dataset_id": 2,
+                                                "review_text": "My order never arrived.",
+                                                "label": 1,
+                                                "confidence": 0.91,
+                                            }
+                                        ],
+                                    },
+                                ],
+                            },
+                            "empty": {
+                                "summary": "История пуста или записи закончились",
+                                "value": [],
+                            },
+                        }
+                    }
+                }
+            },
+            422: {
+                "model": ValidationErrorResponse,
+                "description": "Неверный тип или значение limit/offset.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "detail": [
+                                {
+                                    "loc": ["query", "limit"],
+                                    "message": "Input should be less than or equal to 100",
+                                }
+                            ]
+                        }
+                    }
+                },
+            },
+            503: {
+                "model": ErrorResponse,
+                "description": "Не удалось прочитать SQLite. Попробуйте повторить запрос.",
+                "content": {
+                    "application/json": {
+                        "example": {"detail": "История временно недоступна"}
+                    }
+                },
+            },
+        },
+    )
+    def history(
+        limit: Annotated[
+            int,
+            Query(
+                ge=1,
+                le=100,
+                description="Число запросов на странице, включая все прогнозы каждого.",
+                examples=[10],
+            ),
+        ] = 10,
+        offset: Annotated[
+            int,
+            Query(
+                ge=0,
+                le=2**63 - 1,
+                description="Сколько новых запросов пропустить, 0 — начать с самого нового.",
+                openapi_examples={
+                    "first_page": {"summary": "Первая страница", "value": 0},
+                    "next_page": {"summary": "Следующая страница при limit=10", "value": 10},
+                },
+            ),
+        ] = 0,
+    ):
+        try:
+            return application.state.history.read(limit=limit, offset=offset)
+        except (sqlite3.Error, OSError):
+            LOGGER.exception("Request history could not be read")
+            raise HTTPException(503, "История временно недоступна") from None
 
     @application.post(
         "/load_model",
@@ -353,7 +523,8 @@ def create_app(
             "`label` — оценка 1–5, выбранная как медиана распределения для метрики MAE. "
             "`confidence` — оценённая моделью вероятность выбранной оценки. \n\n"
             "Обработанный запрос и ответы сохраняются в SQLite, тексты отзывов по умолчанию "
-            "не записываются. Заголовки ответа содержат модель, её версию и идентификатор запроса."
+            "не записываются. Просмотр истории — GET /history. "
+            "Заголовки ответа содержат модель, её версию и идентификатор запроса."
         ),
         response_description="Оценка и её вероятность для каждого переданного отзыва.",
         responses={
