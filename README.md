@@ -1,6 +1,6 @@
 # Sentiment Analysis of Company Reviews
 
-Прогноз оценки компании **от 1 до 5** по англоязычному отзыву. Тестовое задание на данных [Kaggle Company Reviews](https://www.kaggle.com/competitions/sentiment-analysis-company-reviews): исследование данных, сравнение моделей и API в Docker.
+Решение соревнования [Sentiment Analysis — Company Reviews на Kaggle](https://www.kaggle.com/competitions/sentiment-analysis-company-reviews). Проект прогнозирует оценку компании **от 1 до 5** по англоязычному отзыву и включает исследование данных, сравнение моделей и API в Docker.
 
 ## Запуск
 
